@@ -106,3 +106,6 @@ For automations like LinkedIn People Search Export, we get an array of objects. 
     "dataEnrichmentCreditsToDeduct": number of emails found * 1 (or resourceConsumption.emailEnrichment)
 }
 ```
+
+
+## ETA : One day i think will be more than enough to make these changes in automation engine and Prathmesh said backend will take 3 hours.
