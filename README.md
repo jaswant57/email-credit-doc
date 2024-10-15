@@ -1,111 +1,189 @@
-# email-credit-doc
+## Email Enrichment Logic
 
-## Email Consumption
+We have three keys:
 
-### Current Situation:
+1.  perEmailEnrichment (number)
+2.  totalEmailEnrichment (number)
+3.  skipCalculation (boolean)
 
-In the backend system, we deduct **email enrichment credits** based on the `requiredResources` field. By default, **1 email enrichment credit** is deducted, but this can be customized using the `resourceConsumption` field in automation config.
-
-### Default Behavior:
-
-When we specify `"emailEnrichment"` in the `requiredResources` field, the backend automatically deducts 1 credit for each email enrichment execution.
-
-#### Example:
+### 1) perEmailEnrichment
 
 ```json
+
 {
-    ...automationConfig,
-  "requiredResources": ["executionTime", "emailEnrichment"]
+  ...config,
+  "resourceConsumption" : {
+    "perEmailEnrichment": 1
+  },
+  ...config,
 }
+
 ```
 
-### Customizing Credit Consumption:
+creditsToDeduct = `perEmailEnrichment` \* `number of emails found`
 
-To deduct more than the default 1 credit, you can use the `"resourceConsumption"` field to specify the number of credits to be consumed for each email enrichment execution.
+Explanation:
+
+- We will calcualte the number of emails found and then multiply it with perEmailEnrichment to get the credits to deduct.
+
+#### Usecase:
+
+Li Peopple Search Export, Li Company Employees Export,etc. (automations that return array of objects)
+
+### 2) totalEmailEnrichment
 
 ```json
+
 {
-    ...automationConfig,
-  "requiredResources": ["executionTime", "emailEnrichment"],
-  "resourceConsumption": {
-    "emailEnrichment": 2
-  }
+  ...config,
+  "resourceConsumption" : {
+    "totalEmailEnrichment": 1
+  },
+  ...config,
 }
+
 ```
 
-## Email Credit Deduction in Automation Engine
+creditsToDeduct = number of emails found > 0 ? `totalEmailEnrichment` : 0
 
-### Summary
+Explanation:
 
-Prathmesh and I discussed that we will send two keys from the Automation Engine:
+- Here, if we have more than one email found, we will deduct the number mentioned in `totalEmailEnrichment` regardless of how many emails we found.
+- If we don't find any email, we deduct `zero` credits
+- This won't consider the `perEmailEnrichment` key even if it's mentioned.
 
-1. **emailFound**: `boolean` — true if an email is found, else false.
-2. **dataEnrichmentCreditsToDeduct**: `number` — the total number of credits to deduct.
+#### Usecase:
 
-### Current Response:
+Find emails using domain (anywhere where we only make one api call but get array of objects as response).
 
-Currently, the response from the Automation Engine looks like this:
+### 3) skipCalculation
 
 ```json
+
 {
-    "success": true,
-    "response": { ... }
+  ...config,
+  "resourceConsumption" : {
+    "skipCalculation": true,
+    "totalEmailEnrichment": 5
+  },
+  ...config,
 }
+
 ```
 
-### Updated Response:
+creditsToDeduct = `totalEmailEnrichment`
 
-We will also send two new keys in the response:
+#### Explanation:
+
+- Here we directly deduct the `totalEmailEnrichment` key, even if we don't find any emails but the api call has to be successfull
+
+#### Usecase:
+
+- Wherever we want to deduct credits on a success of an api call.
+- As we discussed that we would have to use scraperApi for crunchbase automations.
+
+## Some Examples:
+
+1.
 
 ```json
+
 {
-    "success": true,
-    "emailFound": boolean, // true if an email is found, else false
-    "dataEnrichmentCreditsToDeduct": number,  // total credits to deduct
-    "response": { ... }
+  ...config,
+  "resourceConsumption" : {
+    "skipCalculation": true,
+    "perEmailEnrichment": 2,
+    "totalEmailEnrichment": 5
+  },
+  ...config,
 }
+
 ```
 
-### Calculation of `dataEnrichmentCreditsToDeduct`:
+Consider: no of emails found = 10
 
-The `dataEnrichmentCreditsToDeduct` will be calculated by multiplying the number of emails found with the `emailEnrichment` value in `resourceConsumption`. The default value for `emailEnrichment` will be 1 if not specified.
+CreditsTodeduct = 5
 
-```json
-dataEnrichmentCreditsToDeduct = resourceConsumption.emailEnrichment(default: 1) * number of emails found
-```
+Exp: As skipcalculation is true, we directly use the totalEmailEnrichment.
 
-## Two Use Cases:
-
-### 1. Single Input Case:
-
-For automations like LinkedIn Profile Scraper, we get one object as output. The calculation is straightforward:
-
-- Check if an email is found.
-- If an email is found, the response will look like this:
+2.
 
 ```json
+
 {
-  "success": true,
-  "emailFound": true,
-  "dataEnrichmentCreditsToDeduct": 1 // 1 is default or value of resourceConsumption.emailEnrichment
+  ...config,
+  "resourceConsumption" : {
+    "skipCalculation": true,
+    "perEmailEnrichment": 2
+  },
+  ...config,
 }
+
 ```
 
-### 2. Multiple Input Case:
+Consider: no of emails found = 10
 
-For automations like LinkedIn People Search Export, we get an array of objects. Here, we will:
+CreditsTodeduct = 1
 
-- Check each object for an email.
-- Calculate the total number of emails found.
-- Multiply the number of emails found by the email consumption value (default: 1).
+Exp: If skipCalculation is true and `totalEmailEnrichment` is not mentioned, we use the default value of 1. `perEmailEnrichment` has no significance incase of `skipCalculation:true`
+
+3.
 
 ```json
+
 {
-    "success": true,
-    "emailFound": true,
-    "dataEnrichmentCreditsToDeduct": number of emails found * 1 (or resourceConsumption.emailEnrichment)
+  ...config,
+  "resourceConsumption" : {
+    "perEmailEnrichment": 2,
+    "totalEnrichment": 10
+  },
+  ...config,
 }
+
 ```
 
+Consider: no of emails found = 10
 
-## ETA : One day i think will be more than enough to make these changes in automation engine and Prathmesh said backend will take 3 hours.
+CreditsTodeduct = 10
+
+Exp: We found more than zero emails and `totalEmailEnrichment` exists so it takes priority over `perEmailEnrichment`
+
+4.
+
+```json
+
+{
+  ...config,
+  "resourceConsumption" : {
+    "perEmailEnrichment": 2
+  },
+  ...config,
+}
+
+```
+
+Consider: no of emails found = 10
+
+CreditsTodeduct = 20
+
+Exp: As totalEmailEnrichment is not mentioned, we perform the multiplication of no of emails found and `perEmailEnrichment`
+
+5.
+
+```json
+
+{
+  ...config,
+  "resourceConsumption" : {
+
+  },
+  ...config,
+}
+
+```
+
+Consider: no of emails found = 10
+
+CreditsTodeduct = 10
+
+Exp: As `totalEmailEnrichment` and `perEmailEnrichment` is not mentioned, we perform the multiplication of no of emails found and 1 (basically meaning perEmailEnrichment is defaulted to 1)
